@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/jefjesuswt/fleetings-tracker/internal/github"
+	"github.com/jefjesuswt/fleetings-tracker/internal/parser"
 	"github.com/joho/godotenv"
 )
 
@@ -81,4 +82,22 @@ func main() {
 		fmt.Println(content)
 	}
 	fmt.Println("--------------------------------------------------")
+
+	log.Println("🧠 [TEST] Ejecutando parser de expresiones regulares...")
+
+	contentWithReminders := content + "\n- [ ] Actualizar paquetes de Arch Linux [webhook@2026-03-05 18:30]"
+
+	reminders := parser.ExtractReminders(firstFile, contentWithReminders)
+
+	if len(reminders) == 0 {
+		log.Println("⚠️ [TEST] No se encontraron reminders.")
+	} else {
+		log.Printf("✅ [TEST] Se encontraron %d reminders:", len(reminders))
+		for _, r := range reminders {
+			fmt.Printf("   -> ID: %s\n", r.ID)
+			fmt.Printf("   -> Tarea: %s\n", r.Content)
+			fmt.Printf("   -> Fecha: %s\n", r.DueDate.Format("02/01/2006 a las 15:04"))
+			fmt.Printf("   -> Archivo: %s\n", r.File)
+		}
+	}
 }
