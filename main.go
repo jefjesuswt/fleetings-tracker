@@ -1,12 +1,13 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 
 	"github.com/jefjesuswt/fleetings-tracker/internal/github"
-	"github.com/jefjesuswt/fleetings-tracker/internal/parser"
+	"github.com/jefjesuswt/fleetings-tracker/internal/state"
+	"github.com/jefjesuswt/fleetings-tracker/internal/sync"
+	"github.com/jefjesuswt/fleetings-tracker/internal/webhook"
 	"github.com/joho/godotenv"
 )
 
@@ -48,56 +49,21 @@ func main() {
 	log.Println("✅ [INIT] Variables cargadas correctamente. Inicializando componentes...")
 
 	gitClient := github.NewClient(gitToken, gitOwner, gitRepo)
-
-	log.Println("✅ [INIT] Componentes inicializados correctamente. Iniciando servidor...")
-
-	files, err := gitClient.ListFleetings(obsidianFleetingPath)
+	whClient := webhook.NewClient(webhookUrl)
+	stateStore, err := state.NewStore("sent_reminders.json")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("❌ [FATAL] Error inicializando el estado local: %v", err)
 	}
 
-	if len(files) == 0 {
-		log.Println("ℹ️ [INFO] No hay fleetings en el archivo de fleetings especificado")
-		return
+	log.Println("✅ [INIT] Componentes inicializados correctamente. Iniciando el sincronizador...")
+
+	syncer := sync.NewSyncer(gitClient, whClient, stateStore, obsidianFleetingPath)
+
+	log.Println("✅ [INIT] Todo listo para ejecutar el sincronizador. Iniciando...")
+	if err := syncer.Run(); err != nil {
+		log.Fatalf("❌ [FATAL] Error ejecutando el sincronizador: %v", err)
 	}
 
-	for index, file := range files {
-		fmt.Printf(" %d. %s\n", index+1, file)
-	}
-
-	firstFile := files[0]
-	fmt.Printf("ℹ️ [INFO] El primer fleeting es: %s\n", firstFile)
-
-	content, err := gitClient.GetFileContent(firstFile)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	log.Println("✅ [TEST] content descargado con éxito. Primeros 200 caracteres:")
-	fmt.Println("--------------------------------------------------")
-
-	if len(content) > 200 {
-		fmt.Println(content[:200] + "...\n[CONTINÚA]")
-	} else {
-		fmt.Println(content)
-	}
-	fmt.Println("--------------------------------------------------")
-
-	log.Println("🧠 [TEST] Ejecutando parser de expresiones regulares...")
-
-	contentWithReminders := content + "\n- [ ] Actualizar paquetes de Arch Linux [webhook@2026-03-05 18:30]"
-
-	reminders := parser.ExtractReminders(firstFile, contentWithReminders)
-
-	if len(reminders) == 0 {
-		log.Println("⚠️ [TEST] No se encontraron reminders.")
-	} else {
-		log.Printf("✅ [TEST] Se encontraron %d reminders:", len(reminders))
-		for _, r := range reminders {
-			fmt.Printf("   -> ID: %s\n", r.ID)
-			fmt.Printf("   -> Tarea: %s\n", r.Content)
-			fmt.Printf("   -> Fecha: %s\n", r.DueDate.Format("02/01/2006 a las 15:04"))
-			fmt.Printf("   -> Archivo: %s\n", r.File)
-		}
-	}
+	log.Println("--------------------------------------------------")
+	log.Println("🎉 [DONE] Escaneo completado. Esperando el próximo ciclo del cron.")
 }
