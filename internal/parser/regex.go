@@ -13,6 +13,7 @@ var tagRegex = regexp.MustCompile(`\[webhook@(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2})\]`
 func ExtractReminders(filePath, content string) []Reminder {
 	var reminders []Reminder
 	lines := strings.Split(content, "\n")
+	loc, _ := time.LoadLocation("America/Caracas")
 
 	for _, line := range lines {
 		trimmedLine := strings.TrimSpace(line)
@@ -25,7 +26,7 @@ func ExtractReminders(filePath, content string) []Reminder {
 		if len(matches) == 2 {
 			dateStr := matches[1]
 
-			parsedDate, err := time.ParseInLocation("2006-01-02 15:04", dateStr, time.Local)
+			parsedDate, err := time.ParseInLocation("2006-01-02 15:04", dateStr, loc)
 			if err != nil {
 				continue
 			}
