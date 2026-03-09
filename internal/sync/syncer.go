@@ -47,23 +47,36 @@ func (s *Syncer) Run() error {
 
 			// FASE 3: HORA EXACTA (Ya pasó o es el momento justo)
 			if now.After(r.DueDate) {
-				if !s.state.HasBeenSent(r.ID + "_exact") {
-					log.Printf("🚀 Enviando aviso EXACTO: %s", r.Content)
-					s.webhook.Send(r, "🔴 [AHORA]")
-					s.state.MarkAsSent(r.ID + "_exact")
+				phaseID := r.ID + "_exact"
+				if !s.state.HasBeenSent(phaseID) {
+					log.Printf("🚀 Enviando aviso EXACTO [ID: %s]: %s", phaseID, r.Content)
+
+					// Si el webhook falla, no lo marcamos como enviado
+					if err := s.webhook.Send(r, "🔴 [AHORA]"); err != nil {
+						log.Printf("❌ Falló el envío del webhook para %s: %v", phaseID, err)
+						continue
+					}
+
+					// Verificamos si realmente se guardó en el disco
+					if err := s.state.MarkAsSent(phaseID); err != nil {
+						log.Printf("🚨 ERROR FATAL: No se pudo guardar el estado de %s. Esto causará SPAM.", phaseID)
+					}
 					totalEnviados++
 				}
-				continue // Si ya pasó la hora exacta, no evaluamos las fases anteriores
+				continue
 			}
 
 			// FASE 2: 1 HORA ANTES
 			oneHourBefore := r.DueDate.Add(-1 * time.Hour)
 			if now.After(oneHourBefore) {
-				if !s.state.HasBeenSent(r.ID + "_1h") {
-					log.Printf("🚀 Enviando aviso 1 HORA ANTES: %s", r.Content)
-					s.webhook.Send(r, "🟠 [EN 1 HORA]")
-					s.state.MarkAsSent(r.ID + "_1h")
-					totalEnviados++
+				phaseID := r.ID + "_1h"
+				if !s.state.HasBeenSent(phaseID) {
+					log.Printf("🚀 Enviando aviso 1 HORA ANTES [ID: %s]: %s", phaseID, r.Content)
+
+					if err := s.webhook.Send(r, "🟠 [EN 1 HORA]"); err == nil {
+						s.state.MarkAsSent(phaseID)
+						totalEnviados++
+					}
 				}
 				continue
 			}
@@ -71,15 +84,15 @@ func (s *Syncer) Run() error {
 			// FASE 1: HOY EN LA MAÑANA (9:00 AM)
 			// Calculamos las 9:00 AM del mismo día del evento
 			morning := time.Date(r.DueDate.Year(), r.DueDate.Month(), r.DueDate.Day(), 9, 0, 0, 0, time.Local)
-
-			// Para que aplique, el evento debe ser después de las 10:00 AM
-			// (Para que no se envíe al mismo tiempo que el aviso de "1 hora antes")
 			if r.DueDate.Hour() >= 10 && now.After(morning) {
-				if !s.state.HasBeenSent(r.ID + "_morning") {
-					log.Printf("🚀 Enviando aviso DE MAÑANA: %s", r.Content)
-					s.webhook.Send(r, "🟡 [PARA HOY]")
-					s.state.MarkAsSent(r.ID + "_morning")
-					totalEnviados++
+				phaseID := r.ID + "_morning"
+				if !s.state.HasBeenSent(phaseID) {
+					log.Printf("🚀 Enviando aviso DE MAÑANA [ID: %s]: %s", phaseID, r.Content)
+
+					if err := s.webhook.Send(r, "🟡 [PARA HOY]"); err == nil {
+						s.state.MarkAsSent(phaseID)
+						totalEnviados++
+					}
 				}
 			}
 		}
